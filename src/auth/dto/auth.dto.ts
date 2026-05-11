@@ -1,4 +1,11 @@
-import { IsString, IsPhoneNumber, IsEnum, Matches, MinLength, IsDateString } from 'class-validator';
+import {
+  IsString,
+  IsEnum,
+  Matches,
+  MinLength,
+  IsDateString,
+  IsOptional,
+} from 'class-validator';
 import { Gender, UserRole } from '../../users/entities/user.entity';
 
 export class RegisterDto {
@@ -32,4 +39,19 @@ export class LoginDto {
 
   @IsString()
   password: string;
+}
+
+export class UpdateProfileDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(1, { message: '이름을 입력해 주세요.' })
+  name?: string;
+
+  @IsOptional()
+  @IsDateString()
+  birthDate?: string;
+
+  @IsOptional()
+  @IsEnum(Gender)
+  gender?: Gender;
 }
