@@ -1,4 +1,11 @@
-import { IsNumber, IsOptional, IsString, Min, Max } from 'class-validator';
+import {
+  IsDateString,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Min,
+  Max,
+} from 'class-validator';
 
 export class CreateBreathingDataDto {
   @IsNumber()
@@ -15,6 +22,20 @@ export class CreateBreathingDataDto {
 
   @IsNumber()
   @Min(0)
+  @Max(200)
+  @IsOptional()
+  fev1PercentPredicted?: number;
+
+  @IsString()
+  @IsOptional()
+  deviceSource?: string;
+
+  @IsString()
+  @IsOptional()
+  rawSpiro240?: string;
+
+  @IsNumber()
+  @Min(0)
   @Max(100)
   @IsOptional()
   oxygenSaturation?: number;
@@ -26,4 +47,8 @@ export class CreateBreathingDataDto {
   @IsString()
   @IsOptional()
   note?: string;
+
+  @IsDateString()
+  @IsOptional()
+  measuredAt?: string;
 }

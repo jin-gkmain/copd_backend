@@ -10,7 +10,10 @@ import { Gender, UserRole } from '../../users/entities/user.entity';
 
 export class RegisterDto {
   @IsString()
-  @Matches(/^010\d{8}$/, { message: 'Phone number must be a valid Korean mobile number (e.g., 01012345678)' })
+  @Matches(/^010\d{8}$/, {
+    message:
+      'Phone number must be a valid Korean mobile number (e.g., 01012345678)',
+  })
   phoneNumber: string;
 
   @IsString()
@@ -30,7 +33,8 @@ export class RegisterDto {
   gender: Gender;
 
   @IsEnum(UserRole)
-  role: UserRole;
+  @IsOptional()
+  role?: UserRole;
 }
 
 export class LoginDto {

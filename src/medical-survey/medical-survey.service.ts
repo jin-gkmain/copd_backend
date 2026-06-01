@@ -3,12 +3,14 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { MedicalSurvey } from './entities/medical-survey.entity';
 import { SaveMedicalSurveyDto } from './dto/save-medical-survey.dto';
+import { ClinicalProfileService } from '../clinical-profile/clinical-profile.service';
 
 @Injectable()
 export class MedicalSurveyService {
   constructor(
     @InjectRepository(MedicalSurvey)
     private readonly repo: Repository<MedicalSurvey>,
+    private readonly clinicalProfileService: ClinicalProfileService,
   ) {}
 
   async upsert(userId: string, dto: SaveMedicalSurveyDto): Promise<MedicalSurvey> {
@@ -19,7 +21,9 @@ export class MedicalSurveyService {
     if (existing) {
       existing.payload = payload;
       existing.submittedAt = submittedAt;
-      return this.repo.save(existing);
+      const saved = await this.repo.save(existing);
+      await this.clinicalProfileService.updateFromMedicalSurveyPayload(userId, payload);
+      return saved;
     }
 
     const entity = this.repo.create({
@@ -27,7 +31,9 @@ export class MedicalSurveyService {
       payload,
       submittedAt,
     });
-    return this.repo.save(entity);
+    const saved = await this.repo.save(entity);
+    await this.clinicalProfileService.updateFromMedicalSurveyPayload(userId, payload);
+    return saved;
   }
 
   async findMine(userId: string): Promise<MedicalSurvey> {

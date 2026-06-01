@@ -23,6 +23,18 @@ export class BreathingData {
   @Column({ type: 'float', nullable: true })
   pef: number; // Peak Expiratory Flow (L/min)
 
+  @Column({ type: 'float', nullable: true })
+  fev1PercentPredicted: number | null;
+
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  goldAirflowGrade: string | null;
+
+  @Column({ type: 'varchar', length: 32, nullable: true })
+  deviceSource: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  rawSpiro240: string | null;
+
   @Column({ type: 'int', nullable: true })
   oxygenSaturation: number; // SpO2 (%)
 

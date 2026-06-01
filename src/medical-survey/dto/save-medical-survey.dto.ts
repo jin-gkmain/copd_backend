@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsInt, IsObject, Min } from 'class-validator';
+import { IsInt, IsObject, IsOptional, Min } from 'class-validator';
 
 /**
  * Flutter `MedicalSurveyPayload.toJson()` 구조와 동일.
@@ -29,4 +29,9 @@ export class SaveMedicalSurveyDto {
   @ApiProperty()
   @IsObject()
   familyHistory: Record<string, unknown>;
+
+  @ApiProperty()
+  @IsOptional()
+  @IsObject()
+  clinicalProfile?: Record<string, unknown>;
 }

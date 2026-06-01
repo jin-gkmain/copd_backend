@@ -1,8 +1,12 @@
-import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+  ConflictException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
 import * as bcrypt from 'bcrypt';
-import { User } from '../users/entities/user.entity';
+import { User, UserRole } from '../users/entities/user.entity';
 import { RegisterDto } from './dto/auth.dto';
 
 @Injectable()
@@ -14,7 +18,7 @@ export class AuthService {
 
   async validateUser(phoneNumber: string, pass: string): Promise<any> {
     const user = await this.usersService.findOneByPhoneNumber(phoneNumber);
-    if (user && await bcrypt.compare(pass, user.password)) {
+    if (user && (await bcrypt.compare(pass, user.password))) {
       const { password, ...result } = user;
       return result;
     }
@@ -22,7 +26,11 @@ export class AuthService {
   }
 
   async login(user: any) {
-    const payload = { phoneNumber: user.phoneNumber, sub: user.id, role: user.role };
+    const payload = {
+      phoneNumber: user.phoneNumber,
+      sub: user.id,
+      role: user.role,
+    };
     return {
       access_token: this.jwtService.sign(payload),
       user: {
@@ -40,7 +48,9 @@ export class AuthService {
   }
 
   async register(registerDto: RegisterDto) {
-    const existingUser = await this.usersService.findOneByPhoneNumber(registerDto.phoneNumber);
+    const existingUser = await this.usersService.findOneByPhoneNumber(
+      registerDto.phoneNumber,
+    );
     if (existingUser) {
       throw new ConflictException('User already exists');
     }
@@ -48,6 +58,7 @@ export class AuthService {
     const hashedPassword = await bcrypt.hash(registerDto.password, 10);
     const newUser = await this.usersService.create({
       ...registerDto,
+      role: UserRole.PATIENT,
       password: hashedPassword,
     });
 

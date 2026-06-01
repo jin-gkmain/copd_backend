@@ -68,12 +68,16 @@ Most endpoints require a JWT Bearer Token in the Authorization header.
       "fev1": 3.5,                // Forced Expiratory Volume (L)
       "fvc": 4.2,                 // Forced Vital Capacity (L)
       "pef": 450.0,               // Peak Flow (Optional)
+      "fev1PercentPredicted": 62, // FEV1 % predicted from device (Optional)
+      "deviceSource": "spiro_q",  // Measurement device identifier (Optional)
+      "rawSpiro240": "base64...", // Raw SPIRO Q packet for audit/debug (Optional)
       "oxygenSaturation": 98,     // SpO2 % (Optional)
       "heartRate": 72,            // bpm (Optional)
       "note": "After exercise"    // (Optional)
     }
     ```
 *   **Success Response (201):** Created measurement with calculated `overallScore`.
+    Response also includes derived `fev1FvcRatio`, `goldAirflowGrade`, and `source` when available.
 
 ### 2.2 Get All Measurements
 *   **Endpoint:** `GET /breathing`
@@ -130,3 +134,56 @@ Most endpoints require a JWT Bearer Token in the Authorization header.
 *   **Endpoint:** `GET /assessments/six-minute-steps`
 *   **Auth Required:** Yes
 *   **Response:** Array of saved records (newest `endedAt` first), each including `id`, `userId`, fields above, and `createdAt`.
+
+---
+
+## 4. Clinical Profile / GOLD Summary
+
+### 4.1 Get Clinical Profile
+*   **Endpoint:** `GET /clinical-profile`
+*   **Auth Required:** Yes
+*   **Description:** Returns editable clinical profile inputs used for GOLD and adaptive risk summary.
+
+### 4.2 Update Clinical Profile
+*   **Endpoint:** `PATCH /clinical-profile`
+*   **Auth Required:** Yes
+*   **Request Body:**
+    ```json
+    {
+      "fev1PercentPredicted": 62,
+      "mmrcScore": 2,
+      "caatScore": 14,
+      "exacerbationsLast12Months": 1,
+      "smokingStatus": "former",
+      "vaccinationHistory": {
+        "influenza": true,
+        "pneumococcal": false,
+        "rsv": false,
+        "zoster": true,
+        "covid19": true,
+        "tdap": false
+      },
+      "reviewStatus": "pending_review"
+    }
+    ```
+*   **Notes:** `goldAirflowGrade` is derived from `fev1PercentPredicted`; patient-facing text remains review-pending unless explicitly reviewed.
+
+### 4.3 Get Clinical Summary
+*   **Endpoint:** `GET /clinical-summary`
+*   **Auth Required:** Yes
+*   **Description:** Returns GOLD 1-4, A/B/E group, LOW/MED/HIGH adaptive risk, evidence dates, and missing inputs.
+*   **Response Example:**
+    ```json
+    {
+      "goldAirflowGrade": "GOLD 2",
+      "goldAbeGroup": "B",
+      "adaptiveRiskLevel": "MED",
+      "dailyRisk": "yellow",
+      "missingInputs": {
+        "fev1PercentPredicted": false,
+        "exacerbationsLast12Months": false,
+        "symptomScore": false
+      },
+      "safetyNotice": "기록 기반 참고 정보입니다..."
+    }
+    ```

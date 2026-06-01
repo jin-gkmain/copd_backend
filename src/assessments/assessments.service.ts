@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { Assessment, AssessmentType, SixMinuteStepAssessment } from './entities/assessment.entity';
 import { CreateAssessmentDto } from './dto/create-assessment.dto';
 import { CreateSixMinuteStepAssessmentDto } from './dto/create-six-minute-step.dto';
+import { ClinicalProfileService } from '../clinical-profile/clinical-profile.service';
 
 @Injectable()
 export class AssessmentsService {
@@ -12,6 +13,7 @@ export class AssessmentsService {
     private assessmentRepository: Repository<Assessment>,
     @InjectRepository(SixMinuteStepAssessment)
     private sixMinuteStepRepository: Repository<SixMinuteStepAssessment>,
+    private readonly clinicalProfileService: ClinicalProfileService,
   ) {}
 
   async createGeneric(userId: string, dto: CreateAssessmentDto): Promise<Assessment> {
@@ -19,7 +21,9 @@ export class AssessmentsService {
       ...dto,
       userId,
     });
-    return this.assessmentRepository.save(assessment);
+    const saved = await this.assessmentRepository.save(assessment);
+    await this.clinicalProfileService.updateFromAssessment(userId, saved);
+    return saved;
   }
 
   async findAllGenericByUser(userId: string, type?: AssessmentType): Promise<Assessment[]> {

@@ -12,6 +12,7 @@ import { AssessmentsModule } from './assessments/assessments.module';
 import { AirQualityModule } from './air-quality/air-quality.module';
 import { MedicalSurveyModule } from './medical-survey/medical-survey.module';
 import { DailyReportsModule } from './daily-reports/daily-reports.module';
+import { ClinicalProfileModule } from './clinical-profile/clinical-profile.module';
 
 @Module({
   imports: [
@@ -22,16 +23,24 @@ import { DailyReportsModule } from './daily-reports/daily-reports.module';
     }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => ({
-        type: 'postgres',
-        host: configService.get<string>('DB_HOST'),
-        port: configService.get<number>('DB_PORT'),
-        username: configService.get<string>('DB_USERNAME'),
-        password: configService.get<string>('DB_PASSWORD'),
-        database: configService.get<string>('DB_NAME'),
-        autoLoadEntities: true,
-        synchronize: true, // Only for development!
-      }),
+      useFactory: (configService: ConfigService) => {
+        const nodeEnv =
+          configService.get<string>('NODE_ENV') ?? process.env.NODE_ENV;
+        const syncFlag = configService.get<string>('DB_SYNCHRONIZE');
+        const synchronize =
+          syncFlag != null ? syncFlag === 'true' : nodeEnv !== 'production';
+
+        return {
+          type: 'postgres',
+          host: configService.get<string>('DB_HOST'),
+          port: configService.get<number>('DB_PORT'),
+          username: configService.get<string>('DB_USERNAME'),
+          password: configService.get<string>('DB_PASSWORD'),
+          database: configService.get<string>('DB_NAME'),
+          autoLoadEntities: true,
+          synchronize,
+        };
+      },
       inject: [ConfigService],
     }),
     AuthModule,
@@ -41,6 +50,7 @@ import { DailyReportsModule } from './daily-reports/daily-reports.module';
     AirQualityModule,
     MedicalSurveyModule,
     DailyReportsModule,
+    ClinicalProfileModule,
   ],
   controllers: [AppController],
   providers: [AppService],
