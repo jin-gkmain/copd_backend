@@ -40,6 +40,9 @@ export class ClinicalProfile {
   smokingStatus: string | null;
 
   @Column({ type: 'jsonb', nullable: true })
+  smokingCessation: Record<string, unknown> | null;
+
+  @Column({ type: 'jsonb', nullable: true })
   vaccinationHistory: Record<string, unknown> | null;
 
   @Column({ type: 'varchar', length: 32, default: 'pending_review' })
@@ -57,4 +60,3 @@ export class ClinicalProfile {
   @UpdateDateColumn()
   updatedAt: Date;
 }
-

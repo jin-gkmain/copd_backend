@@ -8,6 +8,11 @@ import {
 import { BreathingData } from '../breathing/entities/breathing-data.entity';
 import { DailyMorningReport } from '../daily-reports/entities/daily-morning-report.entity';
 import {
+  buildAdaptiveManagementPlan,
+  buildBadgePlan,
+  buildSmokingCessationPlan,
+  buildVaccinationRecommendations,
+  computeDiseaseActivity,
   computeGoldAbeGroup,
   computeGoldAirflowGrade,
   mapDailyRiskToAdaptiveRisk,
@@ -40,6 +45,7 @@ export class ClinicalProfileService {
         caatScore: null,
         exacerbationsLast12Months: null,
         smokingStatus: null,
+        smokingCessation: null,
         vaccinationHistory: null,
         reviewStatus: 'pending_review',
         latestBreathingMeasuredAt: null,
@@ -66,6 +72,8 @@ export class ClinicalProfileService {
     }
     if (dto.smokingStatus !== undefined)
       profile.smokingStatus = dto.smokingStatus;
+    if (dto.smokingCessation !== undefined)
+      profile.smokingCessation = dto.smokingCessation;
     if (dto.vaccinationHistory !== undefined)
       profile.vaccinationHistory = dto.vaccinationHistory;
     return this.repo.save(profile);
@@ -132,13 +140,40 @@ export class ClinicalProfileService {
     const adaptiveRiskLevel = mapDailyRiskToAdaptiveRisk(
       latestMorning?.computedRisk,
     );
+    const diseaseActivity = computeDiseaseActivity({
+      adaptiveRiskLevel,
+      goldAbeGroup,
+      exacerbationsLast12Months: profile.exacerbationsLast12Months,
+    });
+    const managementPlan = buildAdaptiveManagementPlan(adaptiveRiskLevel);
+    const smokingCessationPlan = buildSmokingCessationPlan({
+      smokingStatus: profile.smokingStatus,
+      smokingCessation: profile.smokingCessation,
+      goldAirflowGrade,
+      fev1PercentPredicted: profile.fev1PercentPredicted,
+    });
+    const vaccinationRecommendations = buildVaccinationRecommendations({
+      vaccinationHistory: profile.vaccinationHistory,
+      goldAirflowGrade,
+      goldAbeGroup,
+    });
+    const badgePlan = buildBadgePlan({
+      smokingStatus: profile.smokingStatus,
+      smokingCessation: profile.smokingCessation,
+      exacerbationsLast12Months: profile.exacerbationsLast12Months,
+    });
 
     return {
       profile: this.serialize(profile),
       goldAirflowGrade,
       goldAbeGroup,
       adaptiveRiskLevel,
+      diseaseActivity,
       dailyRisk: latestMorning?.computedRisk ?? null,
+      managementPlan,
+      smokingCessationPlan,
+      vaccinationRecommendations,
+      badgePlan,
       evidence: {
         latestBreathingMeasuredAt:
           profile.latestBreathingMeasuredAt ??
@@ -169,6 +204,7 @@ export class ClinicalProfileService {
       caatScore: profile.caatScore,
       exacerbationsLast12Months: profile.exacerbationsLast12Months,
       smokingStatus: profile.smokingStatus,
+      smokingCessation: profile.smokingCessation,
       vaccinationHistory: profile.vaccinationHistory,
       reviewStatus: profile.reviewStatus,
       latestBreathingMeasuredAt: profile.latestBreathingMeasuredAt,
@@ -212,6 +248,8 @@ function extractClinicalPatchFromSurvey(
       patch.exacerbationsLast12Months = Math.max(0, Math.round(ex));
     if (typeof src.smokingStatus === 'string')
       patch.smokingStatus = src.smokingStatus;
+    const smokingCessation = asRecord(src.smokingCessation);
+    if (smokingCessation) patch.smokingCessation = smokingCessation;
     const vaccinations = asRecord(src.vaccinationHistory);
     if (vaccinations) patch.vaccinationHistory = vaccinations;
   }

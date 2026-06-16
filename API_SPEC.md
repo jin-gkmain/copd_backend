@@ -155,6 +155,14 @@ Most endpoints require a JWT Bearer Token in the Authorization header.
       "caatScore": 14,
       "exacerbationsLast12Months": 1,
       "smokingStatus": "former",
+      "smokingCessation": {
+        "lastDailyCheckDate": "2026-06-01",
+        "smokedToday": false,
+        "quitIntentionWithinMonth": true,
+        "smokesWithin30MinutesOfWaking": false,
+        "dailyCigarettes": 8,
+        "smokeFreeSince": "2026-06-01"
+      },
       "vaccinationHistory": {
         "influenza": true,
         "pneumococcal": false,
@@ -162,27 +170,74 @@ Most endpoints require a JWT Bearer Token in the Authorization header.
         "zoster": true,
         "covid19": true,
         "tdap": false
-      },
-      "reviewStatus": "pending_review"
+      }
     }
     ```
-*   **Notes:** `goldAirflowGrade` is derived from `fev1PercentPredicted`; patient-facing text remains review-pending unless explicitly reviewed.
+*   **Notes:** `goldAirflowGrade` is derived from `fev1PercentPredicted`; `reviewStatus` is read-only for patient-facing clients. Clinical text remains review-pending unless explicitly reviewed.
 
 ### 4.3 Get Clinical Summary
 *   **Endpoint:** `GET /clinical-summary`
 *   **Auth Required:** Yes
-*   **Description:** Returns GOLD 1-4, A/B/E group, LOW/MED/HIGH adaptive risk, evidence dates, and missing inputs.
+*   **Description:** Returns GOLD 1-4, A/B/E group, LOW/MED/HIGH adaptive risk, disease activity, evidence dates, missing inputs, and PDF-aligned content plans for exercise/education, smoking cessation, vaccination, and badges.
 *   **Response Example:**
     ```json
     {
       "goldAirflowGrade": "GOLD 2",
       "goldAbeGroup": "B",
       "adaptiveRiskLevel": "MED",
+      "diseaseActivity": "monitoring_needed",
       "dailyRisk": "yellow",
       "missingInputs": {
         "fev1PercentPredicted": false,
         "exacerbationsLast12Months": false,
         "symptomScore": false
+      },
+      "managementPlan": {
+        "level": "MED",
+        "exerciseIntensity": "유산소 10-15분, 의자 운동 중심",
+        "frequency": "주 3-4회, 하루 2회 증상 체크",
+        "monitoring": "호흡곤란, 기침, 가래, 활동량 변화를 추적",
+        "systemActions": [
+          "운동 강도 자동 조절",
+          "증상 악화 알림",
+          "지속 시 HIGH 전환 검토"
+        ],
+        "educationContentIds": ["5", "6", "3"]
+      },
+      "smokingCessationPlan": {
+        "status": "former",
+        "fiveAStage": "maintenance",
+        "message": "금연 유지 상태입니다. 재흡연 위험을 정기 확인하고 성공 배지를 추적합니다.",
+        "assessmentQuestions": ["최근 7일 동안 흡연한 날이 있었나요?"],
+        "arrangeAfterDays": 30,
+        "dailyCheckRequired": false,
+        "actionStrategies": [
+          "흡연 유혹이 강했던 상황을 기록하고 회피 전략을 유지하세요."
+        ],
+        "nextCheckDate": "2026-07-01",
+        "smokeFreeDays": 31
+      },
+      "vaccinationRecommendations": [
+        {
+          "key": "pneumococcal",
+          "label": "폐렴구균",
+          "priority": "due",
+          "reason": "COPD 환자는 폐렴구균 접종 이력 확인이 필요합니다.",
+          "reminderDate": null
+        }
+      ],
+      "badgePlan": {
+        "earned": ["gold_stability_3mo"],
+        "trackable": [
+          "smoke_free_24h",
+          "smoke_free_3d",
+          "smoke_free_7d",
+          "gold_stability_3mo",
+          "walk_improvement_6mo"
+        ],
+        "criteria": {
+          "gold_stability_3mo": "3개월 동안 중등도/중증 악화 0회"
+        }
       },
       "safetyNotice": "기록 기반 참고 정보입니다..."
     }

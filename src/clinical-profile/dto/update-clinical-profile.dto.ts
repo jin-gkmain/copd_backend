@@ -46,6 +46,20 @@ export class UpdateClinicalProfileDto {
   smokingStatus?: string;
 
   @ApiPropertyOptional({
+    example: {
+      lastDailyCheckDate: '2026-06-01',
+      smokedToday: false,
+      quitIntentionWithinMonth: true,
+      smokesWithin30MinutesOfWaking: false,
+      dailyCigarettes: 8,
+      smokeFreeSince: '2026-06-01',
+    },
+  })
+  @IsOptional()
+  @IsObject()
+  smokingCessation?: Record<string, unknown>;
+
+  @ApiPropertyOptional({
     example: { influenza: { received: true, year: 2026 } },
   })
   @IsOptional()
