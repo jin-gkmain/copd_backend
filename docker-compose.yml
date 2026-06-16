@@ -29,10 +29,10 @@ services:
     container_name: copd_api
     restart: unless-stopped
     ports:
-      - '3000:3000'
+      - '3002:3002'
     environment:
       NODE_ENV: production
-      PORT: 3000
+      PORT: 3002
       DB_HOST: db
       DB_PORT: 5432
       DB_USERNAME: user
