@@ -21,6 +21,46 @@
   <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
   [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
 
+## ANSOOM COPD Care Backend
+
+NestJS API server for the ANSOOM COPD care app.
+
+## Production Docker Deploy
+
+The repository does not currently include GitHub Actions deployment. After pushing
+to `main`, the production host must pull and restart the Docker service.
+
+```bash
+cd /path/to/copd_backend
+git pull origin main
+export GIT_SHA="$(git rev-parse --short HEAD)"
+export APP_VERSION="$(node -p "require('./package.json').version")"
+docker compose up -d --build api
+```
+
+Verify that Apache or the reverse proxy points to the same port exposed by
+Docker compose:
+
+```bash
+curl -i http://127.0.0.1:3002/health
+curl -i http://127.0.0.1:3002/version
+curl -i https://copd-api.ai-tank.co.kr/health
+curl -i https://copd-api.ai-tank.co.kr/version
+```
+
+After the clinical profile release is running, sign in and verify:
+
+```bash
+curl -i https://copd-api.ai-tank.co.kr/clinical-profile \
+  -H "Authorization: Bearer <JWT>"
+curl -i https://copd-api.ai-tank.co.kr/clinical-summary \
+  -H "Authorization: Bearer <JWT>"
+```
+
+On boot, `ClinicalProfileSchemaService` ensures the production PostgreSQL schema
+has `clinical_profiles` and the extended `breathing_data` columns required by
+the GOLD/5A/vaccination summary APIs.
+
 ## Description
 
 [Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.

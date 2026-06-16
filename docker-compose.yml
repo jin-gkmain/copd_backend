@@ -26,6 +26,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        APP_VERSION: ${APP_VERSION:-0.0.1}
+        GIT_SHA: ${GIT_SHA:-local}
     container_name: copd_api
     restart: unless-stopped
     ports:

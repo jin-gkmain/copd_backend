@@ -12,4 +12,16 @@ export class AppController {
   getHello(): string {
     return this.appService.getHello();
   }
+
+  @Get('health')
+  @ApiOperation({ summary: '프로세스 헬스 체크' })
+  getHealth() {
+    return this.appService.getHealth();
+  }
+
+  @Get('version')
+  @ApiOperation({ summary: '배포 버전 확인' })
+  getVersion() {
+    return this.appService.getVersion();
+  }
 }
