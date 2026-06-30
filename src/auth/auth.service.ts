@@ -1,13 +1,11 @@
-import {
-  Injectable,
-  UnauthorizedException,
-  ConflictException,
-} from '@nestjs/common';
+import { ConflictException, Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
 import * as bcrypt from 'bcrypt';
 import { User, UserRole } from '../users/entities/user.entity';
 import { RegisterDto } from './dto/auth.dto';
+
+export type PublicUser = Omit<User, 'password'>;
 
 @Injectable()
 export class AuthService {
@@ -16,16 +14,18 @@ export class AuthService {
     private jwtService: JwtService,
   ) {}
 
-  async validateUser(phoneNumber: string, pass: string): Promise<any> {
+  async validateUser(
+    phoneNumber: string,
+    pass: string,
+  ): Promise<PublicUser | null> {
     const user = await this.usersService.findOneByPhoneNumber(phoneNumber);
     if (user && (await bcrypt.compare(pass, user.password))) {
-      const { password, ...result } = user;
-      return result;
+      return this.toPublicUser(user);
     }
     return null;
   }
 
-  async login(user: any) {
+  login(user: PublicUser) {
     const payload = {
       phoneNumber: user.phoneNumber,
       sub: user.id,
@@ -47,7 +47,7 @@ export class AuthService {
     return !existing;
   }
 
-  async register(registerDto: RegisterDto) {
+  async register(registerDto: RegisterDto): Promise<PublicUser> {
     const existingUser = await this.usersService.findOneByPhoneNumber(
       registerDto.phoneNumber,
     );
@@ -62,7 +62,18 @@ export class AuthService {
       password: hashedPassword,
     });
 
-    const { password, ...result } = newUser;
-    return result;
+    return this.toPublicUser(newUser);
+  }
+
+  private toPublicUser(user: User): PublicUser {
+    return {
+      id: user.id,
+      phoneNumber: user.phoneNumber,
+      name: user.name,
+      birthDate: user.birthDate,
+      gender: user.gender,
+      role: user.role,
+      createdAt: user.createdAt,
+    };
   }
 }

@@ -36,6 +36,9 @@ export class ClinicalProfile {
   @Column({ type: 'int', nullable: true })
   exacerbationsLast12Months: number | null;
 
+  @Column({ type: 'timestamptz', nullable: true })
+  exacerbationFreeSince: Date | null;
+
   @Column({ type: 'varchar', length: 32, nullable: true })
   smokingStatus: string | null;
 

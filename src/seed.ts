@@ -8,7 +8,7 @@ import { AssessmentType } from './assessments/entities/assessment.entity';
 
 async function bootstrap() {
   const app = await NestFactory.createApplicationContext(AppModule);
-  
+
   const authService = app.get(AuthService);
   const breathingService = app.get(BreathingService);
   const assessmentsService = app.get(AssessmentsService);
@@ -29,9 +29,12 @@ async function bootstrap() {
   try {
     user = await authService.register(testUser);
     console.log('User created:', user.phoneNumber);
-  } catch (e) {
+  } catch {
     console.log('User might already exist, trying to login...');
-    const loginResult = await authService.validateUser(testUser.phoneNumber, testUser.password);
+    const loginResult = await authService.validateUser(
+      testUser.phoneNumber,
+      testUser.password,
+    );
     user = loginResult;
   }
 
@@ -91,4 +94,4 @@ async function bootstrap() {
   await app.close();
 }
 
-bootstrap();
+void bootstrap();

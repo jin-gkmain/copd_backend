@@ -1,6 +1,5 @@
 export type GoldAirflowGrade = 'GOLD 1' | 'GOLD 2' | 'GOLD 3' | 'GOLD 4';
 export type GoldAbeGroup = 'A' | 'B' | 'E';
-export type DailyRisk = 'green' | 'yellow' | 'red';
 export type AdaptiveRiskLevel = 'LOW' | 'MED' | 'HIGH';
 export type DiseaseActivityLevel =
   | 'low_activity'
@@ -48,10 +47,21 @@ export interface BadgePlan {
   criteria: Record<string, string>;
 }
 
+export interface SixMinuteWalkEvidence {
+  endedAt: Date;
+  steps: number;
+  estimatedDistanceMeters?: number | null;
+}
+
 export function computeGoldAirflowGrade(
   fev1PercentPredicted: number | null | undefined,
 ): GoldAirflowGrade | null {
-  if (fev1PercentPredicted == null || !Number.isFinite(fev1PercentPredicted)) {
+  if (
+    fev1PercentPredicted == null ||
+    !Number.isFinite(fev1PercentPredicted) ||
+    fev1PercentPredicted < 0 ||
+    fev1PercentPredicted > 200
+  ) {
     return null;
   }
   if (fev1PercentPredicted >= 80) return 'GOLD 1';
@@ -66,27 +76,34 @@ export function computeGoldAbeGroup(input: {
   exacerbationsLast12Months?: number | null;
 }): GoldAbeGroup | null {
   const exacerbations = input.exacerbationsLast12Months;
-  if (exacerbations == null || !Number.isFinite(exacerbations)) return null;
+  if (
+    exacerbations == null ||
+    !Number.isInteger(exacerbations) ||
+    exacerbations < 0 ||
+    exacerbations > 99
+  ) {
+    return null;
+  }
   if (exacerbations >= 1) return 'E';
 
   const hasHighMmrc =
     input.mmrcScore != null &&
-    Number.isFinite(input.mmrcScore) &&
+    isNumberInRange(input.mmrcScore, 0, 4) &&
     input.mmrcScore >= 2;
   const hasHighCaat =
     input.caatScore != null &&
-    Number.isFinite(input.caatScore) &&
+    isNumberInRange(input.caatScore, 0, 40) &&
     input.caatScore >= 10;
   const hasAnySymptomScore =
-    (input.mmrcScore != null && Number.isFinite(input.mmrcScore)) ||
-    (input.caatScore != null && Number.isFinite(input.caatScore));
+    isNumberInRange(input.mmrcScore, 0, 4) ||
+    isNumberInRange(input.caatScore, 0, 40);
 
   if (!hasAnySymptomScore) return null;
   return hasHighMmrc || hasHighCaat ? 'B' : 'A';
 }
 
 export function mapDailyRiskToAdaptiveRisk(
-  risk: DailyRisk | string | null | undefined,
+  risk: string | null | undefined,
 ): AdaptiveRiskLevel | null {
   if (risk === 'green') return 'LOW';
   if (risk === 'yellow') return 'MED';
@@ -141,7 +158,7 @@ export function buildAdaptiveManagementPlan(
         '증상 악화 알림',
         '지속 시 HIGH 전환 검토',
       ],
-      educationContentIds: ['5', '6', '3'],
+      educationContentIds: ['5', '3', '8'],
     };
   }
   if (level === 'LOW') {
@@ -155,7 +172,7 @@ export function buildAdaptiveManagementPlan(
         '교육 콘텐츠 제공',
         '일일 체크 알림',
       ],
-      educationContentIds: ['1', '6', '3', '4'],
+      educationContentIds: ['1', '6', '3', '9'],
     };
   }
   return {
@@ -171,7 +188,7 @@ export function buildAdaptiveManagementPlan(
 export function buildSmokingCessationPlan(input: {
   smokingStatus?: string | null;
   smokingCessation?: Record<string, unknown> | null;
-  goldAirflowGrade?: GoldAirflowGrade | string | null;
+  goldAirflowGrade?: string | null;
   fev1PercentPredicted?: number | null;
 }): SmokingCessationPlan {
   const status = input.smokingStatus ?? null;
@@ -182,12 +199,17 @@ export function buildSmokingCessationPlan(input: {
   const smokedToday = asBoolean(state.smokedToday);
   const smokeFreeDays = computeSmokeFreeDays(state.smokeFreeSince);
   const lastDailyCheckDate = stringValue(state.lastDailyCheckDate);
-  const nextCheckDate = dateAfterDays(
-    lastDailyCheckDate ?? todayKey(),
-    status === 'current' ? 1 : 30,
-  );
 
   if (status === 'current') {
+    const dailyCheckRequired = !isCurrentOrFutureDateKey(lastDailyCheckDate);
+    const fiveAStage = currentSmokingFiveAStage({
+      dailyCheckRequired,
+      smokedToday,
+      quitIntention,
+      earlySmoke,
+      dailyCigarettes,
+      smokeFreeDays,
+    });
     const fev1Text =
       input.fev1PercentPredicted != null &&
       Number.isFinite(input.fev1PercentPredicted)
@@ -198,7 +220,7 @@ export function buildSmokingCessationPlan(input: {
       : '';
     return {
       status,
-      fiveAStage: quitIntention === false ? 'advise' : 'assist',
+      fiveAStage,
       message: `${fev1Text}${goldText} 기준으로 금연 의도와 니코틴 의존도 확인이 필요합니다.`,
       assessmentQuestions: [
         '앞으로 1개월 안에 금연을 시도할 의향이 있나요?',
@@ -206,14 +228,17 @@ export function buildSmokingCessationPlan(input: {
         '하루 평균 흡연량은 몇 개비인가요?',
       ],
       arrangeAfterDays: 7,
-      dailyCheckRequired: !isCurrentOrFutureDateKey(lastDailyCheckDate),
+      dailyCheckRequired,
       actionStrategies: buildSmokingStrategies({
         quitIntention,
         earlySmoke,
         dailyCigarettes,
         smokedToday,
       }),
-      nextCheckDate,
+      nextCheckDate: dateAfterDays(
+        lastDailyCheckDate ?? todayKey(),
+        fiveAStage === 'arrange' ? 7 : 1,
+      ),
       smokeFreeDays,
     };
   }
@@ -230,7 +255,7 @@ export function buildSmokingCessationPlan(input: {
         '흡연 유혹이 강했던 상황을 기록하고 회피 전략을 유지하세요.',
         '금연 유지 기간과 악화 0회 기록을 함께 확인하세요.',
       ],
-      nextCheckDate,
+      nextCheckDate: dateAfterDays(lastDailyCheckDate ?? todayKey(), 30),
       smokeFreeDays,
     };
   }
@@ -260,17 +285,38 @@ export function buildSmokingCessationPlan(input: {
   };
 }
 
+function currentSmokingFiveAStage(input: {
+  dailyCheckRequired: boolean;
+  smokedToday: boolean | null;
+  quitIntention: boolean | null;
+  earlySmoke: boolean | null;
+  dailyCigarettes: number | null;
+  smokeFreeDays: number | null;
+}): SmokingCessationPlan['fiveAStage'] {
+  if (input.dailyCheckRequired || input.smokedToday == null) return 'ask';
+  if (input.quitIntention == null || input.quitIntention === false) {
+    return 'advise';
+  }
+  if (input.earlySmoke == null || input.dailyCigarettes == null) {
+    return 'assess';
+  }
+  if (input.smokedToday === false && input.smokeFreeDays != null) {
+    return 'arrange';
+  }
+  return 'assist';
+}
+
 export function buildVaccinationRecommendations(input: {
   vaccinationHistory?: Record<string, unknown> | null;
-  goldAirflowGrade?: GoldAirflowGrade | string | null;
+  goldAirflowGrade?: string | null;
   goldAbeGroup?: GoldAbeGroup | null;
+  ageYears?: number | null;
+  asOf?: Date;
 }): VaccinationRecommendation[] {
   const history = input.vaccinationHistory ?? {};
-  const missing = (key: string) => !hasReceivedVaccine(history[key]);
-  const highRisk =
-    input.goldAbeGroup === 'E' ||
-    input.goldAirflowGrade === 'GOLD 3' ||
-    input.goldAirflowGrade === 'GOLD 4';
+  const asOf = input.asOf ?? new Date();
+  const missing = (key: string) =>
+    !isVaccinationCurrent(key, history[key], asOf);
   const recs: VaccinationRecommendation[] = [];
 
   if (missing('influenza')) {
@@ -279,7 +325,7 @@ export function buildVaccinationRecommendations(input: {
       label: '인플루엔자(독감)',
       priority: 'seasonal',
       reason: '매년 가을 접종 이력을 확인하고 정기 알림을 권장합니다.',
-      reminderDate: seasonalInfluenzaReminderDate(),
+      reminderDate: seasonalInfluenzaReminderDate(asOf),
     });
   }
   if (missing('pneumococcal')) {
@@ -291,20 +337,23 @@ export function buildVaccinationRecommendations(input: {
       reminderDate: null,
     });
   }
-  if (missing('rsv') && highRisk) {
+  if (missing('rsv')) {
     recs.push({
       key: 'rsv',
       label: 'RSV',
       priority: 'risk_based',
-      reason: 'GOLD 3-4 또는 E 그룹 등 고위험 기록에서 접종 상담을 권장합니다.',
+      reason: 'COPD와 같은 만성 폐 질환에서는 RSV 접종 상담을 권장합니다.',
       reminderDate: null,
     });
   }
-  for (const [key, label] of [
-    ['zoster', '대상포진'],
+  const historyChecks: Array<[string, string]> = [
     ['covid19', '코로나19'],
     ['tdap', 'Tdap'],
-  ] as const) {
+  ];
+  if (input.ageYears != null && input.ageYears >= 50) {
+    historyChecks.unshift(['zoster', '대상포진']);
+  }
+  for (const [key, label] of historyChecks) {
     if (missing(key)) {
       recs.push({
         key,
@@ -322,6 +371,9 @@ export function buildBadgePlan(input: {
   smokingStatus?: string | null;
   smokingCessation?: Record<string, unknown> | null;
   exacerbationsLast12Months?: number | null;
+  exacerbationFreeSince?: Date | string | null;
+  walkImprovementOverSixMonths?: boolean;
+  asOf?: Date;
 }): BadgePlan {
   const criteria = {
     smoke_free_24h: '24시간 금연 유지',
@@ -335,28 +387,43 @@ export function buildBadgePlan(input: {
   const smokeFreeDays = computeSmokeFreeDays(
     input.smokingCessation?.smokeFreeSince,
   );
-  if (
-    input.smokingStatus === 'never' ||
-    (smokeFreeDays != null && smokeFreeDays >= 1)
-  ) {
+  if (smokeFreeDays != null && smokeFreeDays >= 1) {
     earned.push('smoke_free_24h');
   }
-  if (
-    input.smokingStatus === 'never' ||
-    (smokeFreeDays != null && smokeFreeDays >= 3)
-  ) {
+  if (smokeFreeDays != null && smokeFreeDays >= 3) {
     earned.push('smoke_free_3d');
   }
-  if (
-    input.smokingStatus === 'never' ||
-    (smokeFreeDays != null && smokeFreeDays >= 7)
-  ) {
+  if (smokeFreeDays != null && smokeFreeDays >= 7) {
     earned.push('smoke_free_7d');
   }
-  if (input.exacerbationsLast12Months === 0) {
+  if (
+    input.exacerbationsLast12Months === 0 &&
+    hasElapsedDays(input.exacerbationFreeSince, 90, input.asOf ?? new Date())
+  ) {
     earned.push('gold_stability_3mo');
   }
+  if (input.walkImprovementOverSixMonths === true) {
+    earned.push('walk_improvement_6mo');
+  }
   return { earned, trackable, criteria };
+}
+
+export function hasSixMonthWalkImprovement(
+  latest: SixMinuteWalkEvidence | null | undefined,
+  baseline: SixMinuteWalkEvidence | null | undefined,
+): boolean {
+  if (!latest || !baseline || latest.endedAt <= baseline.endedAt) return false;
+  const sixMonthsAfterBaseline = new Date(baseline.endedAt);
+  sixMonthsAfterBaseline.setUTCMonth(sixMonthsAfterBaseline.getUTCMonth() + 6);
+  if (latest.endedAt < sixMonthsAfterBaseline) return false;
+
+  if (
+    latest.estimatedDistanceMeters != null &&
+    baseline.estimatedDistanceMeters != null
+  ) {
+    return latest.estimatedDistanceMeters > baseline.estimatedDistanceMeters;
+  }
+  return latest.steps > baseline.steps;
 }
 
 function buildSmokingStrategies(input: {
@@ -367,6 +434,7 @@ function buildSmokingStrategies(input: {
 }): string[] {
   const strategies = [
     '흡연 욕구가 올 때 5분 지연, 물 마시기, 짧은 걷기 중 하나를 선택하세요.',
+    '전자담배는 금연 보조제로 사용하지 말고 의료진과 검증된 금연 방법을 상의하세요.',
   ];
   if (input.quitIntention === true) {
     strategies.push('금연 시작일을 정하고 가족 또는 의료진에게 공유하세요.');
@@ -375,7 +443,7 @@ function buildSmokingStrategies(input: {
       '금연의 장점과 걱정되는 점을 하나씩 기록해 상담 때 확인하세요.',
     );
   }
-  if (input.earlySmoke === true || (input.dailyCigarettes ?? 0) >= 10) {
+  if (input.earlySmoke === true || (input.dailyCigarettes ?? 0) >= 20) {
     strategies.push('니코틴 의존도가 높을 수 있어 보조요법 상담을 권장합니다.');
   }
   if (input.smokedToday === false) {
@@ -386,6 +454,29 @@ function buildSmokingStrategies(input: {
   return strategies;
 }
 
+function isNumberInRange(
+  value: number | null | undefined,
+  min: number,
+  max: number,
+): value is number {
+  return (
+    value != null && Number.isFinite(value) && value >= min && value <= max
+  );
+}
+
+function hasElapsedDays(
+  value: Date | string | null | undefined,
+  days: number,
+  asOf: Date,
+): boolean {
+  if (value == null) return false;
+  const start = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(asOf.getTime())) {
+    return false;
+  }
+  return asOf.getTime() - start.getTime() >= days * 86400000;
+}
+
 function hasReceivedVaccine(v: unknown): boolean {
   if (v === true) return true;
   if (!v || typeof v !== 'object' || Array.isArray(v)) return false;
@@ -393,6 +484,45 @@ function hasReceivedVaccine(v: unknown): boolean {
   return (
     record.received === true || record.done === true || record.status === 'done'
   );
+}
+
+function isVaccinationCurrent(
+  key: string,
+  value: unknown,
+  asOf: Date,
+): boolean {
+  if (!hasReceivedVaccine(value)) return false;
+  const recurring = key === 'influenza' || key === 'tdap';
+  if (value === true || typeof value !== 'object' || value == null) {
+    return !recurring;
+  }
+
+  const record = value as Record<string, unknown>;
+  const administeredAt = vaccinationDate(record);
+  if (!administeredAt) return !recurring;
+
+  if (key === 'influenza') {
+    return administeredAt.getUTCFullYear() === asOf.getUTCFullYear();
+  }
+  if (key === 'tdap') {
+    const dueAt = new Date(administeredAt);
+    dueAt.setUTCFullYear(dueAt.getUTCFullYear() + 10);
+    return dueAt > asOf;
+  }
+  return true;
+}
+
+function vaccinationDate(record: Record<string, unknown>): Date | null {
+  const raw = record.administeredAt ?? record.date;
+  if (typeof raw === 'string' && raw.trim()) {
+    const parsed = new Date(raw);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+  }
+  const year = finiteNumber(record.year);
+  if (year != null && Number.isInteger(year) && year >= 1900 && year <= 2200) {
+    return new Date(Date.UTC(year, 0, 1));
+  }
+  return null;
 }
 
 function asBoolean(v: unknown): boolean | null {
@@ -437,9 +567,9 @@ function computeSmokeFreeDays(value: unknown): number | null {
   );
 }
 
-function seasonalInfluenzaReminderDate(): string {
-  const now = new Date();
-  const year =
-    now.getUTCMonth() <= 9 ? now.getUTCFullYear() : now.getUTCFullYear() + 1;
-  return `${year}-10-01`;
+function seasonalInfluenzaReminderDate(now: Date): string {
+  const year = now.getUTCFullYear();
+  const thisSeason = new Date(Date.UTC(year, 9, 1));
+  if (now < thisSeason) return `${year}-10-01`;
+  return now.toISOString().slice(0, 10);
 }

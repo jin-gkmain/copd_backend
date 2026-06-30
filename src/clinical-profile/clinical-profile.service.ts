@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import {
   Assessment,
   AssessmentType,
+  SixMinuteStepAssessment,
 } from '../assessments/entities/assessment.entity';
 import { BreathingData } from '../breathing/entities/breathing-data.entity';
 import { DailyMorningReport } from '../daily-reports/entities/daily-morning-report.entity';
@@ -15,10 +16,12 @@ import {
   computeDiseaseActivity,
   computeGoldAbeGroup,
   computeGoldAirflowGrade,
+  hasSixMonthWalkImprovement,
   mapDailyRiskToAdaptiveRisk,
 } from './clinical-classification.engine';
 import { UpdateClinicalProfileDto } from './dto/update-clinical-profile.dto';
 import { ClinicalProfile } from './entities/clinical-profile.entity';
+import { User } from '../users/entities/user.entity';
 
 @Injectable()
 export class ClinicalProfileService {
@@ -31,6 +34,10 @@ export class ClinicalProfileService {
     private readonly assessmentRepo: Repository<Assessment>,
     @InjectRepository(DailyMorningReport)
     private readonly morningRepo: Repository<DailyMorningReport>,
+    @InjectRepository(SixMinuteStepAssessment)
+    private readonly sixMinuteWalkRepo: Repository<SixMinuteStepAssessment>,
+    @InjectRepository(User)
+    private readonly userRepo: Repository<User>,
   ) {}
 
   async getOrCreate(userId: string): Promise<ClinicalProfile> {
@@ -44,6 +51,7 @@ export class ClinicalProfileService {
         mmrcScore: null,
         caatScore: null,
         exacerbationsLast12Months: null,
+        exacerbationFreeSince: null,
         smokingStatus: null,
         smokingCessation: null,
         vaccinationHistory: null,
@@ -68,6 +76,11 @@ export class ClinicalProfileService {
     if (dto.mmrcScore !== undefined) profile.mmrcScore = dto.mmrcScore;
     if (dto.caatScore !== undefined) profile.caatScore = dto.caatScore;
     if (dto.exacerbationsLast12Months !== undefined) {
+      if (dto.exacerbationsLast12Months === 0) {
+        profile.exacerbationFreeSince ??= new Date();
+      } else {
+        profile.exacerbationFreeSince = null;
+      }
       profile.exacerbationsLast12Months = dto.exacerbationsLast12Months;
     }
     if (dto.smokingStatus !== undefined)
@@ -127,6 +140,19 @@ export class ClinicalProfileService {
       where: { userId, type: AssessmentType.DYSPNEA },
       order: { createdAt: 'DESC' },
     });
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    const walkRecords = await this.sixMinuteWalkRepo.find({
+      where: { userId },
+      order: { endedAt: 'DESC' },
+    });
+    const latestWalk = walkRecords[0] ?? null;
+    const baselineWalk = latestWalk
+      ? (walkRecords.find((row) => {
+          const sixMonthsAfter = new Date(row.endedAt);
+          sixMonthsAfter.setUTCMonth(sixMonthsAfter.getUTCMonth() + 6);
+          return sixMonthsAfter <= latestWalk.endedAt;
+        }) ?? null)
+      : null;
     const mmrcScore = profile.mmrcScore ?? latestMmrc?.score ?? null;
     const caatScore = profile.caatScore ?? null;
     const goldAirflowGrade =
@@ -156,11 +182,17 @@ export class ClinicalProfileService {
       vaccinationHistory: profile.vaccinationHistory,
       goldAirflowGrade,
       goldAbeGroup,
+      ageYears: ageAt(user?.birthDate ?? null),
     });
     const badgePlan = buildBadgePlan({
       smokingStatus: profile.smokingStatus,
       smokingCessation: profile.smokingCessation,
       exacerbationsLast12Months: profile.exacerbationsLast12Months,
+      exacerbationFreeSince: profile.exacerbationFreeSince,
+      walkImprovementOverSixMonths: hasSixMonthWalkImprovement(
+        latestWalk,
+        baselineWalk,
+      ),
     });
 
     return {
@@ -203,6 +235,7 @@ export class ClinicalProfileService {
       mmrcScore: profile.mmrcScore,
       caatScore: profile.caatScore,
       exacerbationsLast12Months: profile.exacerbationsLast12Months,
+      exacerbationFreeSince: profile.exacerbationFreeSince,
       smokingStatus: profile.smokingStatus,
       smokingCessation: profile.smokingCessation,
       vaccinationHistory: profile.vaccinationHistory,
@@ -226,6 +259,21 @@ function finiteNumber(v: unknown): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
+function ageAt(birthDate: string | null, now = new Date()): number | null {
+  if (!birthDate) return null;
+  const parts = birthDate.split('-').map(Number);
+  if (parts.length !== 3 || parts.some((part) => !Number.isInteger(part))) {
+    return null;
+  }
+  const [year, month, day] = parts;
+  let age = now.getUTCFullYear() - year;
+  const beforeBirthday =
+    now.getUTCMonth() + 1 < month ||
+    (now.getUTCMonth() + 1 === month && now.getUTCDate() < day);
+  if (beforeBirthday) age--;
+  return age >= 0 ? age : null;
+}
+
 function extractClinicalPatchFromSurvey(
   payload: Record<string, unknown>,
 ): UpdateClinicalProfileDto {
@@ -238,14 +286,21 @@ function extractClinicalPatchFromSurvey(
   const patch: UpdateClinicalProfileDto = {};
   for (const src of sources) {
     const fev1 = finiteNumber(src.fev1PercentPredicted);
-    if (fev1 !== undefined) patch.fev1PercentPredicted = fev1;
+    if (fev1 !== undefined && fev1 >= 0 && fev1 <= 200) {
+      patch.fev1PercentPredicted = fev1;
+    }
     const mmrc = finiteNumber(src.mmrcScore);
-    if (mmrc !== undefined) patch.mmrcScore = mmrc;
+    if (mmrc !== undefined && mmrc >= 0 && mmrc <= 4) {
+      patch.mmrcScore = mmrc;
+    }
     const caat = finiteNumber(src.caatScore);
-    if (caat !== undefined) patch.caatScore = caat;
+    if (caat !== undefined && caat >= 0 && caat <= 40) {
+      patch.caatScore = caat;
+    }
     const ex = finiteNumber(src.exacerbationsLast12Months);
-    if (ex !== undefined)
-      patch.exacerbationsLast12Months = Math.max(0, Math.round(ex));
+    if (ex !== undefined && ex >= 0 && ex <= 99) {
+      patch.exacerbationsLast12Months = Math.round(ex);
+    }
     if (typeof src.smokingStatus === 'string')
       patch.smokingStatus = src.smokingStatus;
     const smokingCessation = asRecord(src.smokingCessation);
