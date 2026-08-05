@@ -1,4 +1,8 @@
-import { ConflictException, Injectable } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
 import * as bcrypt from 'bcrypt';
@@ -6,6 +10,7 @@ import { User, UserRole } from '../users/entities/user.entity';
 import { RegisterDto } from './dto/auth.dto';
 
 export type PublicUser = Omit<User, 'password'>;
+export const currentPrivacyPolicyVersion = '2026-08-03';
 
 @Injectable()
 export class AuthService {
@@ -55,14 +60,38 @@ export class AuthService {
       throw new ConflictException('User already exists');
     }
 
+    const { privacyPolicyAgreed: _, ...profile } = registerDto;
     const hashedPassword = await bcrypt.hash(registerDto.password, 10);
     const newUser = await this.usersService.create({
-      ...registerDto,
+      ...profile,
       role: UserRole.PATIENT,
       password: hashedPassword,
+      privacyPolicyVersion: currentPrivacyPolicyVersion,
+      privacyPolicyAgreedAt: new Date(),
     });
 
     return this.toPublicUser(newUser);
+  }
+
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<void> {
+    const user = await this.usersService.findById(userId);
+    if (!user || !(await bcrypt.compare(currentPassword, user.password))) {
+      throw new UnauthorizedException('현재 비밀번호가 일치하지 않습니다.');
+    }
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    await this.usersService.updatePassword(user.id, passwordHash);
+  }
+
+  async deleteAccount(userId: string, password: string): Promise<void> {
+    const user = await this.usersService.findById(userId);
+    if (!user || !(await bcrypt.compare(password, user.password))) {
+      throw new UnauthorizedException('현재 비밀번호가 일치하지 않습니다.');
+    }
+    await this.usersService.deleteAccountData(user.id);
   }
 
   private toPublicUser(user: User): PublicUser {
@@ -74,6 +103,8 @@ export class AuthService {
       gender: user.gender,
       role: user.role,
       createdAt: user.createdAt,
+      privacyPolicyVersion: user.privacyPolicyVersion,
+      privacyPolicyAgreedAt: user.privacyPolicyAgreedAt,
     };
   }
 }

@@ -5,6 +5,7 @@ import {
   UseGuards,
   Get,
   Patch,
+  Delete,
   Request,
   UnauthorizedException,
   Query,
@@ -12,7 +13,13 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { AuthGuard } from '@nestjs/passport';
-import { LoginDto, RegisterDto, UpdateProfileDto } from './dto/auth.dto';
+import {
+  ChangePasswordDto,
+  DeleteAccountDto,
+  LoginDto,
+  RegisterDto,
+  UpdateProfileDto,
+} from './dto/auth.dto';
 import { User } from '../users/entities/user.entity';
 import { UsersService } from '../users/users.service';
 
@@ -30,7 +37,8 @@ export class AuthController {
     if (!phoneNumber || !/^010\d{8}$/.test(phoneNumber)) {
       return { available: false, validFormat: false };
     }
-    const available = await this.authService.isPhoneNumberAvailable(phoneNumber);
+    const available =
+      await this.authService.isPhoneNumberAvailable(phoneNumber);
     return { available, validFormat: true };
   }
 
@@ -43,7 +51,10 @@ export class AuthController {
   @Post('login')
   @ApiOperation({ summary: '로그인 (JWT 발급)' })
   async login(@Body() loginDto: LoginDto) {
-    const user = await this.authService.validateUser(loginDto.phoneNumber, loginDto.password);
+    const user = await this.authService.validateUser(
+      loginDto.phoneNumber,
+      loginDto.password,
+    );
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
     }
@@ -70,6 +81,34 @@ export class AuthController {
     return this.mapPublicProfile(u);
   }
 
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth('JWT')
+  @Patch('password')
+  @ApiOperation({ summary: '현재 비밀번호 확인 후 비밀번호 변경' })
+  async changePassword(
+    @Request() req: { user: User },
+    @Body() dto: ChangePasswordDto,
+  ) {
+    await this.authService.changePassword(
+      req.user.id,
+      dto.currentPassword,
+      dto.newPassword,
+    );
+    return { changed: true };
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth('JWT')
+  @Delete('account')
+  @ApiOperation({ summary: '현재 비밀번호 확인 후 계정과 건강 기록 삭제' })
+  async deleteAccount(
+    @Request() req: { user: User },
+    @Body() dto: DeleteAccountDto,
+  ) {
+    await this.authService.deleteAccount(req.user.id, dto.password);
+    return { deleted: true };
+  }
+
   private mapPublicProfile(u: User) {
     return {
       id: u.id,
@@ -79,6 +118,8 @@ export class AuthController {
       gender: u.gender,
       role: u.role,
       createdAt: u.createdAt,
+      privacyPolicyVersion: u.privacyPolicyVersion,
+      privacyPolicyAgreedAt: u.privacyPolicyAgreedAt,
     };
   }
 }

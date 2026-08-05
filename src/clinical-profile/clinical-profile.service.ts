@@ -9,15 +9,14 @@ import {
 import { BreathingData } from '../breathing/entities/breathing-data.entity';
 import { DailyMorningReport } from '../daily-reports/entities/daily-morning-report.entity';
 import {
-  buildAdaptiveManagementPlan,
+  buildRiskManagementPlan,
   buildBadgePlan,
   buildSmokingCessationPlan,
   buildVaccinationRecommendations,
-  computeDiseaseActivity,
   computeGoldAbeGroup,
   computeGoldAirflowGrade,
+  computeUnifiedRiskLevel,
   hasSixMonthWalkImprovement,
-  mapDailyRiskToAdaptiveRisk,
 } from './clinical-classification.engine';
 import { UpdateClinicalProfileDto } from './dto/update-clinical-profile.dto';
 import { ClinicalProfile } from './entities/clinical-profile.entity';
@@ -163,15 +162,11 @@ export class ClinicalProfileService {
       caatScore,
       exacerbationsLast12Months: profile.exacerbationsLast12Months,
     });
-    const adaptiveRiskLevel = mapDailyRiskToAdaptiveRisk(
-      latestMorning?.computedRisk,
-    );
-    const diseaseActivity = computeDiseaseActivity({
-      adaptiveRiskLevel,
+    const riskLevel = computeUnifiedRiskLevel({
       goldAbeGroup,
-      exacerbationsLast12Months: profile.exacerbationsLast12Months,
+      dailyRisk: latestMorning?.computedRisk,
     });
-    const managementPlan = buildAdaptiveManagementPlan(adaptiveRiskLevel);
+    const managementPlan = buildRiskManagementPlan(riskLevel);
     const smokingCessationPlan = buildSmokingCessationPlan({
       smokingStatus: profile.smokingStatus,
       smokingCessation: profile.smokingCessation,
@@ -198,10 +193,7 @@ export class ClinicalProfileService {
     return {
       profile: this.serialize(profile),
       goldAirflowGrade,
-      goldAbeGroup,
-      adaptiveRiskLevel,
-      diseaseActivity,
-      dailyRisk: latestMorning?.computedRisk ?? null,
+      riskLevel,
       managementPlan,
       smokingCessationPlan,
       vaccinationRecommendations,

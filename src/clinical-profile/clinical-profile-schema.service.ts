@@ -83,6 +83,10 @@ export class ClinicalProfileSchemaService implements OnModuleInit {
         ADD COLUMN IF NOT EXISTS "deviceSource" character varying(32),
         ADD COLUMN IF NOT EXISTS "rawSpiro240" text
     `);
+    await this.dataSource.query(`
+      ALTER TABLE "breathing_data"
+        ALTER COLUMN "overallScore" DROP NOT NULL
+    `);
 
     this.logger.log('Clinical profile schema is ready');
   }

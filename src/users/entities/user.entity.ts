@@ -1,4 +1,9 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+} from 'typeorm';
 
 export enum UserRole {
   DOCTOR = 'doctor',
@@ -40,6 +45,12 @@ export class User {
     default: UserRole.PATIENT,
   })
   role: UserRole;
+
+  @Column({ type: 'varchar', length: 32, nullable: true })
+  privacyPolicyVersion: string | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  privacyPolicyAgreedAt: Date | null;
 
   @CreateDateColumn()
   createdAt: Date;

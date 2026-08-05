@@ -3,27 +3,29 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { DailyMorningReport } from './entities/daily-morning-report.entity';
 import { CreateDailyMorningReportDto } from './dto/create-daily-morning-report.dto';
-import { BreathingService } from '../breathing/breathing.service';
 import {
   computeDailyRisk,
   payloadFromUnknown,
   subReportingDays,
   type ReportRow,
-  type BreathingRow,
   type StepSnap,
   type RiskLevel,
 } from './daily-risk.engine';
-import { applyTemporalRiskOverlay, parseStoredRiskLevel } from './daily-risk-temporal';
+import {
+  applyTemporalRiskOverlay,
+  parseStoredRiskLevel,
+} from './daily-risk-temporal';
 
 @Injectable()
 export class DailyReportsService {
   constructor(
     @InjectRepository(DailyMorningReport)
     private readonly reportRepo: Repository<DailyMorningReport>,
-    private readonly breathingService: BreathingService,
   ) {}
 
-  private buildPayload(dto: CreateDailyMorningReportDto): Record<string, unknown> {
+  private buildPayload(
+    dto: CreateDailyMorningReportDto,
+  ): Record<string, unknown> {
     return {
       dyspnea: dto.dyspnea,
       cough: dto.cough,
@@ -43,7 +45,10 @@ export class DailyReportsService {
     return rows;
   }
 
-  async upsertMorning(userId: string, dto: CreateDailyMorningReportDto): Promise<DailyMorningReport> {
+  async upsertMorning(
+    userId: string,
+    dto: CreateDailyMorningReportDto,
+  ): Promise<DailyMorningReport> {
     const payload = this.buildPayload(dto);
     let entity = await this.reportRepo.findOne({
       where: { userId, reportingDay: dto.reportingDay },
@@ -66,51 +71,50 @@ export class DailyReportsService {
       order: { reportingDay: 'DESC' },
       take: 21,
     });
-    const asc = [...recent].sort((a, b) => a.reportingDay.localeCompare(b.reportingDay));
+    const asc = [...recent].sort((a, b) =>
+      a.reportingDay.localeCompare(b.reportingDay),
+    );
     const minKey = subReportingDays(dto.reportingDay, 6);
     const inWindow = asc.filter(
       (e) => e.reportingDay >= minKey && e.reportingDay <= dto.reportingDay,
     );
     const rows = this.toReportRows(inWindow);
 
-    const breathingAll = await this.breathingService.findAllByUser(userId);
-    const now = Date.now();
-    const ms7 = 7 * 24 * 60 * 60 * 1000;
-    const breathing: BreathingRow[] = breathingAll
-      .filter((b) => now - new Date(b.measuredAt).getTime() <= ms7)
-      .map((b) => ({
-        measuredAt: new Date(b.measuredAt),
-        overallScore: b.overallScore,
-      }));
-
     let steps: StepSnap[] | undefined;
     if (dto.dailyStepsSnapshot?.length) {
-      steps = dto.dailyStepsSnapshot.map((s) => ({ date: s.date, steps: s.steps }));
+      steps = dto.dailyStepsSnapshot.map((s) => ({
+        date: s.date,
+        steps: s.steps,
+      }));
     }
 
-    const { level: baseLevel, reasonCodes: baseReasonCodes } = computeDailyRisk({
-      reportsAscending: rows,
-      todayReportingDay: dto.reportingDay,
-      breathing,
-      dailyStepsSnapshot: steps,
-    });
+    const { level: baseLevel, reasonCodes: baseReasonCodes } = computeDailyRisk(
+      {
+        reportsAscending: rows,
+        todayReportingDay: dto.reportingDay,
+        dailyStepsSnapshot: steps,
+      },
+    );
 
     const yKey = subReportingDays(dto.reportingDay, 1);
     const d2Key = subReportingDays(dto.reportingDay, 2);
     const yEnt = asc.find((r) => r.reportingDay === yKey);
     const d2Ent = asc.find((r) => r.reportingDay === d2Key);
 
-    const readHistoricalBase = (e: DailyMorningReport | undefined): RiskLevel | null => {
+    const readHistoricalBase = (
+      e: DailyMorningReport | undefined,
+    ): RiskLevel | null => {
       if (!e) return null;
       return parseStoredRiskLevel(e.baseComputedRisk ?? e.computedRisk);
     };
 
-    const { level: finalLevel, reasonCodes: finalReasons } = applyTemporalRiskOverlay({
-      baseLevel,
-      baseReasonCodes,
-      yesterdayBase: readHistoricalBase(yEnt),
-      dayBeforeYesterdayBase: readHistoricalBase(d2Ent),
-    });
+    const { level: finalLevel, reasonCodes: finalReasons } =
+      applyTemporalRiskOverlay({
+        baseLevel,
+        baseReasonCodes,
+        yesterdayBase: readHistoricalBase(yEnt),
+        dayBeforeYesterdayBase: readHistoricalBase(d2Ent),
+      });
 
     entity.baseComputedRisk = baseLevel;
     entity.computedRisk = finalLevel;
@@ -119,7 +123,10 @@ export class DailyReportsService {
     return entity;
   }
 
-  async findMorningRecent(userId: string, days: number): Promise<DailyMorningReport[]> {
+  async findMorningRecent(
+    userId: string,
+    days: number,
+  ): Promise<DailyMorningReport[]> {
     const n = Math.min(Math.max(days || 7, 1), 30);
     return this.reportRepo.find({
       where: { userId },

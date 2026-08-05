@@ -1,4 +1,11 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  ManyToOne,
+  JoinColumn,
+} from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 
 @Entity('breathing_data')
@@ -41,8 +48,10 @@ export class BreathingData {
   @Column({ type: 'int', nullable: true })
   heartRate: number; // bpm
 
-  @Column({ type: 'int' })
-  overallScore: number; // Calculated score (0-100)
+  // Legacy column retained for existing rows. New measurements use clinical
+  // metrics directly because the content specification defines no 0-100 score.
+  @Column({ type: 'int', nullable: true })
+  overallScore: number | null;
 
   @Column({ nullable: true })
   note: string;

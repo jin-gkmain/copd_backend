@@ -1,7 +1,6 @@
 import {
   computeDailyRisk,
   payloadFromUnknown,
-  riskFromScore,
   type MorningPayload,
 } from './daily-risk.engine';
 
@@ -15,24 +14,12 @@ const stable: MorningPayload = {
 };
 
 describe('daily risk engine', () => {
-  it.each([
-    [80, 'low'],
-    [79.9, 'medium'],
-    [60, 'medium'],
-    [59.9, 'high'],
-    [40, 'high'],
-    [39.9, 'critical'],
-  ])('maps breathing score %p to %p', (score, expected) => {
-    expect(riskFromScore(score)).toBe(expected);
-  });
-
   it('maps stable, one-change, and two-change reports to green/yellow/red', () => {
     const reportingDay = '2026-06-30';
     const run = (payload: MorningPayload) =>
       computeDailyRisk({
         reportsAscending: [{ reportingDay, payload }],
         todayReportingDay: reportingDay,
-        breathing: [],
       });
 
     expect(run(stable).level).toBe('green');
@@ -55,32 +42,10 @@ describe('daily risk engine', () => {
         }),
       ),
       todayReportingDay: '2026-06-30',
-      breathing: [],
     });
 
     expect(result.level).toBe('red');
     expect(result.reasonCodes).toContain('symptom_accumulation_days');
-  });
-
-  it('raises yellow or red from recent breathing score evidence', () => {
-    const now = new Date();
-    const base = {
-      reportsAscending: [{ reportingDay: '2026-06-30', payload: stable }],
-      todayReportingDay: '2026-06-30',
-    };
-
-    expect(
-      computeDailyRisk({
-        ...base,
-        breathing: [{ measuredAt: now, overallScore: 59 }],
-      }),
-    ).toMatchObject({ level: 'yellow' });
-    expect(
-      computeDailyRisk({
-        ...base,
-        breathing: [{ measuredAt: now, overallScore: 49 }],
-      }),
-    ).toMatchObject({ level: 'red' });
   });
 
   it('rejects malformed morning payloads instead of inventing defaults', () => {

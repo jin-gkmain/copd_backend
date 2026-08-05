@@ -1,13 +1,9 @@
 export type GoldAirflowGrade = 'GOLD 1' | 'GOLD 2' | 'GOLD 3' | 'GOLD 4';
 export type GoldAbeGroup = 'A' | 'B' | 'E';
-export type AdaptiveRiskLevel = 'LOW' | 'MED' | 'HIGH';
-export type DiseaseActivityLevel =
-  | 'low_activity'
-  | 'monitoring_needed'
-  | 'high_activity';
+export type RiskLevel = 'LOW' | 'MED' | 'HIGH';
 
-export interface AdaptiveManagementPlan {
-  level: AdaptiveRiskLevel | null;
+export interface RiskManagementPlan {
+  level: RiskLevel | null;
   exerciseIntensity: string;
   frequency: string;
   monitoring: string;
@@ -102,37 +98,42 @@ export function computeGoldAbeGroup(input: {
   return hasHighMmrc || hasHighCaat ? 'B' : 'A';
 }
 
-export function mapDailyRiskToAdaptiveRisk(
+export function mapDailyReportToRiskLevel(
   risk: string | null | undefined,
-): AdaptiveRiskLevel | null {
+): RiskLevel | null {
   if (risk === 'green') return 'LOW';
   if (risk === 'yellow') return 'MED';
   if (risk === 'red') return 'HIGH';
   return null;
 }
 
-export function computeDiseaseActivity(input: {
-  adaptiveRiskLevel?: AdaptiveRiskLevel | null;
+export function computeUnifiedRiskLevel(input: {
   goldAbeGroup?: GoldAbeGroup | null;
-  exacerbationsLast12Months?: number | null;
-}): DiseaseActivityLevel {
-  if (
-    input.adaptiveRiskLevel === 'HIGH' ||
-    input.goldAbeGroup === 'E' ||
-    (input.exacerbationsLast12Months != null &&
-      input.exacerbationsLast12Months >= 1)
-  ) {
-    return 'high_activity';
-  }
-  if (input.adaptiveRiskLevel === 'LOW' && input.goldAbeGroup === 'A') {
-    return 'low_activity';
-  }
-  return 'monitoring_needed';
+  dailyRisk?: string | null;
+}): RiskLevel | null {
+  const clinicalRisk =
+    input.goldAbeGroup === 'E'
+      ? 'HIGH'
+      : input.goldAbeGroup === 'B'
+        ? 'MED'
+        : input.goldAbeGroup === 'A'
+          ? 'LOW'
+          : null;
+  const dailyRisk = mapDailyReportToRiskLevel(input.dailyRisk);
+  const rank: Record<RiskLevel, number> = {
+    LOW: 1,
+    MED: 2,
+    HIGH: 3,
+  };
+
+  if (clinicalRisk == null) return dailyRisk;
+  if (dailyRisk == null) return clinicalRisk;
+  return rank[dailyRisk] > rank[clinicalRisk] ? dailyRisk : clinicalRisk;
 }
 
-export function buildAdaptiveManagementPlan(
-  level: AdaptiveRiskLevel | null,
-): AdaptiveManagementPlan {
+export function buildRiskManagementPlan(
+  level: RiskLevel | null,
+): RiskManagementPlan {
   if (level === 'HIGH') {
     return {
       level,

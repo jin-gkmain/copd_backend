@@ -1,13 +1,13 @@
 import {
-  buildAdaptiveManagementPlan,
+  buildRiskManagementPlan,
   buildBadgePlan,
   buildSmokingCessationPlan,
   buildVaccinationRecommendations,
-  computeDiseaseActivity,
   computeGoldAbeGroup,
   computeGoldAirflowGrade,
+  computeUnifiedRiskLevel,
   hasSixMonthWalkImprovement,
-  mapDailyRiskToAdaptiveRisk,
+  mapDailyReportToRiskLevel,
 } from './clinical-classification.engine';
 
 describe('clinical classification engine', () => {
@@ -76,50 +76,41 @@ describe('clinical classification engine', () => {
     });
   });
 
-  it('maps daily risk to adaptive LOW/MED/HIGH', () => {
-    expect(mapDailyRiskToAdaptiveRisk('green')).toBe('LOW');
-    expect(mapDailyRiskToAdaptiveRisk('yellow')).toBe('MED');
-    expect(mapDailyRiskToAdaptiveRisk('red')).toBe('HIGH');
-    expect(mapDailyRiskToAdaptiveRisk(null)).toBeNull();
+  it('maps daily reports to LOW/MED/HIGH', () => {
+    expect(mapDailyReportToRiskLevel('green')).toBe('LOW');
+    expect(mapDailyReportToRiskLevel('yellow')).toBe('MED');
+    expect(mapDailyReportToRiskLevel('red')).toBe('HIGH');
+    expect(mapDailyReportToRiskLevel(null)).toBeNull();
   });
 
-  it('builds risk-level adaptive management plans from the PDF mapping', () => {
-    expect(buildAdaptiveManagementPlan('LOW')).toMatchObject({
+  it('uses the highest level from clinical and daily risk evidence', () => {
+    expect(
+      computeUnifiedRiskLevel({ goldAbeGroup: 'A', dailyRisk: 'green' }),
+    ).toBe('LOW');
+    expect(
+      computeUnifiedRiskLevel({ goldAbeGroup: 'B', dailyRisk: 'green' }),
+    ).toBe('MED');
+    expect(
+      computeUnifiedRiskLevel({ goldAbeGroup: 'A', dailyRisk: 'red' }),
+    ).toBe('HIGH');
+    expect(
+      computeUnifiedRiskLevel({ goldAbeGroup: 'E', dailyRisk: 'green' }),
+    ).toBe('HIGH');
+  });
+
+  it('builds risk-level management plans from the PDF mapping', () => {
+    expect(buildRiskManagementPlan('LOW')).toMatchObject({
       exerciseIntensity: expect.stringContaining('20-30분'),
       educationContentIds: ['1', '6', '3', '9'],
     });
-    expect(buildAdaptiveManagementPlan('MED')).toMatchObject({
+    expect(buildRiskManagementPlan('MED')).toMatchObject({
       frequency: expect.stringContaining('주 3-4회'),
       educationContentIds: ['5', '3', '8'],
     });
-    expect(buildAdaptiveManagementPlan('HIGH')).toMatchObject({
+    expect(buildRiskManagementPlan('HIGH')).toMatchObject({
       exerciseIntensity: expect.stringContaining('운동 중단'),
       educationContentIds: ['5', '3'],
     });
-  });
-
-  it('computes disease activity from risk and exacerbation context', () => {
-    expect(
-      computeDiseaseActivity({
-        adaptiveRiskLevel: 'LOW',
-        goldAbeGroup: 'A',
-        exacerbationsLast12Months: 0,
-      }),
-    ).toBe('low_activity');
-    expect(
-      computeDiseaseActivity({
-        adaptiveRiskLevel: 'MED',
-        goldAbeGroup: 'B',
-        exacerbationsLast12Months: 0,
-      }),
-    ).toBe('monitoring_needed');
-    expect(
-      computeDiseaseActivity({
-        adaptiveRiskLevel: 'LOW',
-        goldAbeGroup: 'E',
-        exacerbationsLast12Months: 1,
-      }),
-    ).toBe('high_activity');
   });
 
   it('builds 5A smoking cessation guidance for current smokers', () => {

@@ -23,6 +23,7 @@ async function bootstrap() {
     birthDate: '1980-05-20',
     gender: Gender.MALE,
     role: UserRole.PATIENT,
+    privacyPolicyAgreed: true,
   };
 
   let user;
